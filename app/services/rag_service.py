@@ -1,9 +1,9 @@
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
 
 from app.config import (
-    OLLAMA_BASE_URL,
+    GROQ_API_KEY,
     MODEL_NAME
 )
 
@@ -38,15 +38,14 @@ vector_db = Chroma(
 
 
 # ==========================================
-# Load Ollama LLM from .env
+# Load Groq LLM
 # ==========================================
 
-llm = ChatOllama(
-    model=MODEL_NAME,
-    base_url=OLLAMA_BASE_URL,
+llm = ChatGroq(
+    model_name=MODEL_NAME,
+    groq_api_key=GROQ_API_KEY,
     temperature=0
 )
-
 
 print("✅ RAG Service Loaded Successfully")
 
@@ -55,7 +54,7 @@ print("✅ RAG Service Loaded Successfully")
 # Main Enterprise RAG Function
 # ==========================================
 
-def ask_question(role, question):
+def ask_question(role: str, question: str):
 
     # --------------------------------------
     # RBAC Authorization
@@ -74,7 +73,6 @@ def ask_question(role, question):
 
         return "You are not authorized to access this information."
 
-
     # --------------------------------------
     # Prompt Injection Guard
     # --------------------------------------
@@ -89,7 +87,6 @@ def ask_question(role, question):
         )
 
         return "Unsafe prompt detected. Request rejected."
-
 
     # --------------------------------------
     # PII Protection
@@ -106,7 +103,6 @@ def ask_question(role, question):
 
         return "Access to sensitive personal information is restricted."
 
-
     # --------------------------------------
     # Retrieve Documents
     # --------------------------------------
@@ -115,7 +111,6 @@ def ask_question(role, question):
         question,
         k=2
     )
-
 
     # --------------------------------------
     # Context Relevance Check
@@ -135,7 +130,6 @@ def ask_question(role, question):
             "in the HR policy to answer that question."
         )
 
-
     # --------------------------------------
     # Prepare Context
     # --------------------------------------
@@ -148,9 +142,8 @@ def ask_question(role, question):
         doc.page_content for doc in docs
     )
 
-
     # --------------------------------------
-    # Create LLM Prompt
+    # Create Prompt
     # --------------------------------------
 
     prompt = f"""
@@ -159,8 +152,9 @@ You are an Enterprise HR Assistant.
 Rules:
 1. Answer only from the HR policy context.
 2. Never make up information.
-3. If the answer is unavailable say:
+3. If information is unavailable, say:
 "I don't have enough information in the HR policy."
+4. Keep answers professional.
 
 HR Policy Context:
 {context}
@@ -171,19 +165,19 @@ User Question:
 Answer:
 """
 
-
     # --------------------------------------
     # Generate Response
     # --------------------------------------
 
     response = llm.invoke(prompt)
 
+    answer = response.content
 
     # --------------------------------------
     # Output Guard
     # --------------------------------------
 
-    if not check_output_safety(response.content):
+    if not check_output_safety(answer):
 
         log_event(
             role,
@@ -193,7 +187,6 @@ Answer:
         )
 
         return "Response blocked due to security policy."
-
 
     # --------------------------------------
     # Audit Success
@@ -206,5 +199,4 @@ Answer:
         "Response generated successfully"
     )
 
-
-    return response.content
+    return answer

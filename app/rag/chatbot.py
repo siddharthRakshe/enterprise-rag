@@ -1,3 +1,5 @@
+import os
+
 from app.guardrails.context_guard import check_context_relevance
 from app.guardrails.prompt_guard import check_prompt_safety
 from app.guardrails.pii_guard import check_pii_request
@@ -10,7 +12,8 @@ from app.logging.audit_logger import log_event
 
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_ollama import ChatOllama
+
+from langchain_groq import ChatGroq
 
 
 # ==================================================
@@ -33,11 +36,12 @@ vector_db = Chroma(
 
 
 # ==================================================
-# Load Local Llama Model
+# Load Groq LLM
 # ==================================================
 
-llm = ChatOllama(
-    model="llama3.2",
+llm = ChatGroq(
+    model_name="llama3-8b-8192",
+    groq_api_key=os.getenv("GROQ_API_KEY"),
     temperature=0
 )
 
@@ -55,10 +59,7 @@ print("hr_admin")
 print("finance")
 print("admin")
 
-
-# IMPORTANT FIX
 user_role = input("\nEnter your role: ").strip().lower()
-
 
 print("\nLogged in as:", user_role)
 print("Type 'exit' to quit.\n")
@@ -70,23 +71,17 @@ print("Type 'exit' to quit.\n")
 
 while True:
 
-    # User question
     question = input("You: ").strip()
 
     if question.lower() == "exit":
         print("\n👋 Goodbye!")
         break
 
-
     # ==================================================
     # RBAC Permission Check
     # ==================================================
 
     required_permission = get_required_permission(question)
-
-    print("DEBUG Role =", repr(user_role))
-    print("DEBUG Permission =", repr(required_permission))
-
 
     if not check_permission(user_role, required_permission):
 
@@ -100,12 +95,12 @@ while True:
         print(
             "\n🔐 Assistant: You are not authorized to access this information."
         )
+
         print("\n" + "=" * 60)
         continue
 
-
     # ==================================================
-    # Prompt Injection Guard
+    # Prompt Guard
     # ==================================================
 
     if not check_prompt_safety(question):
@@ -123,7 +118,6 @@ while True:
 
         print("\n" + "=" * 60)
         continue
-
 
     # ==================================================
     # PII Guard
@@ -145,20 +139,14 @@ while True:
         print("\n" + "=" * 60)
         continue
 
-
     # ==================================================
-    # Retrieve from ChromaDB
+    # Retrieve Context
     # ==================================================
 
     results = vector_db.similarity_search_with_score(
         question,
         k=2
     )
-
-
-    # ==================================================
-    # Context Guard
-    # ==================================================
 
     if not check_context_relevance(results):
 
@@ -176,19 +164,14 @@ while True:
         print("\n" + "=" * 60)
         continue
 
-
-    # Create context
-    docs = [
-        doc for doc, score in results
-    ]
+    docs = [doc for doc, score in results]
 
     context = "\n\n".join(
         doc.page_content for doc in docs
     )
 
-
     # ==================================================
-    # LLM Prompt
+    # Prompt
     # ==================================================
 
     prompt = f"""
@@ -209,10 +192,7 @@ Question:
 Answer:
 """
 
-
-    # Generate response
     response = llm.invoke(prompt)
-
 
     # ==================================================
     # Output Guard
@@ -224,7 +204,7 @@ Answer:
             user_role,
             question,
             "OUTPUT_BLOCKED",
-            "Unsafe LLM response blocked"
+            "Unsafe response blocked"
         )
 
         print(
@@ -233,7 +213,6 @@ Answer:
 
         print("\n" + "=" * 60)
         continue
-
 
     # ==================================================
     # Success Log
@@ -246,8 +225,6 @@ Answer:
         "Response generated successfully"
     )
 
-
-    # Final Answer
     print("\n🤖 Assistant:")
     print(response.content)
 
