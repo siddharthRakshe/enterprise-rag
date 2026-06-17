@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.api.models import ChatRequest, ChatResponse
 from app.services.rag_service import ask_question
 
-from app.database.connection import get_db
+from app.database.connection import get_db, engine
+from app.database.models import Base
 
 from app.auth.schemas import UserRegister, UserResponse
 from app.auth.login_schema import UserLogin
@@ -18,14 +19,25 @@ from app.security.jwt_handler import create_access_token
 from app.security.dependencies import get_current_user
 
 
+# ==========================================
+# Create Database Tables Automatically
+# ==========================================
+
+Base.metadata.create_all(bind=engine)
+
+
+# ==========================================
+# FastAPI App
+# ==========================================
+
 app = FastAPI(
     title="Enterprise Secure RAG API"
 )
 
 
-# ==============================
+# ==========================================
 # Health Check
-# ==============================
+# ==========================================
 
 @app.get("/")
 def home():
@@ -34,10 +46,9 @@ def home():
     }
 
 
-# ==============================
+# ==========================================
 # Secure RAG Chat Endpoint
-# JWT extracts the role automatically
-# ==============================
+# ==========================================
 
 @app.post(
     "/chat",
@@ -58,9 +69,9 @@ def chat(
     )
 
 
-# ==============================
+# ==========================================
 # User Registration
-# ==============================
+# ==========================================
 
 @app.post(
     "/register",
@@ -80,15 +91,16 @@ def register_user(
         return new_user
 
     except ValueError as e:
+
         raise HTTPException(
             status_code=400,
             detail=str(e)
         )
 
 
-# ==============================
-# User Login + JWT Generation
-# ==============================
+# ==========================================
+# User Login
+# ==========================================
 
 @app.post("/login")
 def login_user(
@@ -103,11 +115,11 @@ def login_user(
     )
 
     if not user:
+
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password"
         )
-
 
     access_token = create_access_token(
         {
@@ -116,7 +128,6 @@ def login_user(
             "role": user.role
         }
     )
-
 
     return {
         "access_token": access_token,
