@@ -1,0 +1,42 @@
+# Python virtual environment
+venv/
+.env/
+.venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+
+# Jupyter files
+.ipynb_checkpoints/
+
+# Git files
+.git/
+.gitignore
+
+# Environment variables
+.env
+.env.*
+
+# Tests (optional)
+tests/
+
+# Documentation
+README.md
+
+# macOS files
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+audit.log
+
+# Docker files that should not be copied
+docker-compose.yml
