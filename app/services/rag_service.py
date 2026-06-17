@@ -1,5 +1,8 @@
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 from langchain_groq import ChatGroq
 
 from app.config import (
@@ -28,12 +31,22 @@ embedding_model = HuggingFaceEmbeddings(
 
 
 # ==========================================
-# Load Chroma Vector Database
+# Load PDF and Create Vector DB
 # ==========================================
 
-vector_db = Chroma(
-    persist_directory="chroma_db",
-    embedding_function=embedding_model
+loader = PyPDFLoader("documents/HR_Policy.pdf")
+documents = loader.load()
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=100,
+    chunk_overlap=20
+)
+
+chunks = splitter.split_documents(documents)
+
+vector_db = Chroma.from_documents(
+    documents=chunks,
+    embedding=embedding_model
 )
 
 
@@ -56,10 +69,6 @@ print("✅ RAG Service Loaded Successfully")
 
 def ask_question(role: str, question: str):
 
-    # --------------------------------------
-    # RBAC Authorization
-    # --------------------------------------
-
     required_permission = get_required_permission(question)
 
     if not check_permission(role, required_permission):
@@ -73,10 +82,6 @@ def ask_question(role: str, question: str):
 
         return "You are not authorized to access this information."
 
-    # --------------------------------------
-    # Prompt Injection Guard
-    # --------------------------------------
-
     if not check_prompt_safety(question):
 
         log_event(
@@ -87,10 +92,6 @@ def ask_question(role: str, question: str):
         )
 
         return "Unsafe prompt detected. Request rejected."
-
-    # --------------------------------------
-    # PII Protection
-    # --------------------------------------
 
     if not check_pii_request(question):
 
@@ -103,18 +104,10 @@ def ask_question(role: str, question: str):
 
         return "Access to sensitive personal information is restricted."
 
-    # --------------------------------------
-    # Retrieve Documents
-    # --------------------------------------
-
     results = vector_db.similarity_search_with_score(
         question,
         k=2
     )
-
-    # --------------------------------------
-    # Context Relevance Check
-    # --------------------------------------
 
     if not check_context_relevance(results):
 
@@ -130,10 +123,6 @@ def ask_question(role: str, question: str):
             "in the HR policy to answer that question."
         )
 
-    # --------------------------------------
-    # Prepare Context
-    # --------------------------------------
-
     docs = [
         doc for doc, score in results
     ]
@@ -141,10 +130,6 @@ def ask_question(role: str, question: str):
     context = "\n\n".join(
         doc.page_content for doc in docs
     )
-
-    # --------------------------------------
-    # Create Prompt
-    # --------------------------------------
 
     prompt = f"""
 You are an Enterprise HR Assistant.
@@ -165,17 +150,9 @@ User Question:
 Answer:
 """
 
-    # --------------------------------------
-    # Generate Response
-    # --------------------------------------
-
     response = llm.invoke(prompt)
 
     answer = response.content
-
-    # --------------------------------------
-    # Output Guard
-    # --------------------------------------
 
     if not check_output_safety(answer):
 
@@ -187,10 +164,6 @@ Answer:
         )
 
         return "Response blocked due to security policy."
-
-    # --------------------------------------
-    # Audit Success
-    # --------------------------------------
 
     log_event(
         role,
