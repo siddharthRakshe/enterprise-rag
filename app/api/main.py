@@ -25,7 +25,9 @@ def handle_query(payload: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Force FastAPI to read the dynamic PORT from Railway directly in the code
+port = int(os.getenv("PORT", 8000))
+
 if __name__ == "__main__":
-    # Railway passes a dynamic port via environment variables
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
+    import uvicorn
+    uvicorn.run("app.api.main:app", host="0.0.0.0", port=port, reload=False)
