@@ -1,135 +1,31 @@
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from app.api.models import ChatRequest, ChatResponse
+import os
+import uvicorn
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from app.services.rag_service import ask_question
 
-from app.database.connection import get_db, engine
-from app.database.models import Base
+app = FastAPI(title="Enterprise HR RAG API")
 
-from app.auth.schemas import UserRegister, UserResponse
-from app.auth.login_schema import UserLogin
+class QueryRequest(BaseModel):
+    role: str
+    question: str
 
-from app.auth.crud import (
-    create_user,
-    authenticate_user
-)
+class QueryResponse(BaseModel):
+    answer: str
 
-from app.security.jwt_handler import create_access_token
-from app.security.dependencies import get_current_user
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
-
-# ==========================================
-# Create Database Tables Automatically
-# ==========================================
-
-Base.metadata.create_all(bind=engine)
-
-
-# ==========================================
-# FastAPI App
-# ==========================================
-
-app = FastAPI(
-    title="Enterprise Secure RAG API"
-)
-
-
-# ==========================================
-# Health Check
-# ==========================================
-
-@app.get("/")
-def home():
-    return {
-        "message": "Enterprise Secure RAG API is running!"
-    }
-
-
-# ==========================================
-# Secure RAG Chat Endpoint
-# ==========================================
-
-@app.post(
-    "/chat",
-    response_model=ChatResponse
-)
-def chat(
-    request: ChatRequest,
-    current_user: dict = Depends(get_current_user)
-):
-
-    answer = ask_question(
-        role=current_user["role"],
-        question=request.question
-    )
-
-    return ChatResponse(
-        answer=answer
-    )
-
-
-# ==========================================
-# User Registration
-# ==========================================
-
-@app.post(
-    "/register",
-    response_model=UserResponse
-)
-def register_user(
-    user: UserRegister,
-    db: Session = Depends(get_db)
-):
-
+@app.post("/api/v1/query", response_model=QueryResponse)
+def handle_query(payload: QueryRequest):
     try:
-        new_user = create_user(
-            db,
-            user
-        )
+        response_text = ask_question(role=payload.role, question=payload.question)
+        return QueryResponse(answer=response_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        return new_user
-
-    except ValueError as e:
-
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
-
-
-# ==========================================
-# User Login
-# ==========================================
-
-@app.post("/login")
-def login_user(
-    user_data: UserLogin,
-    db: Session = Depends(get_db)
-):
-
-    user = authenticate_user(
-        db,
-        user_data.email,
-        user_data.password
-    )
-
-    if not user:
-
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
-        )
-
-    access_token = create_access_token(
-        {
-            "user_id": user.id,
-            "username": user.username,
-            "role": user.role
-        }
-    )
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+if __name__ == "__main__":
+    # Railway passes a dynamic port via environment variables
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)
